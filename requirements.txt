@@ -1,0 +1,9 @@
+transformers
+datasets
+sentencepiece
+seqeval
+scikit-learn
+matplotlib
+numpy
+torch
+gradio

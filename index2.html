@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinical Summary Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['DM Sans', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                        display: ['Outfit', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        clinical: {
+                            50: '#f0fdfa', 100: '#ccfbf1', 200: '#99f6e4', 300: '#5eead4', 400: '#2dd4bf',
+                            500: '#14b8a6', 600: '#0d9488', 700: '#0f766e', 800: '#115e59', 900: '#134e4a',
+                        },
+                        ink: { 800: '#1e293b', 700: '#334155', 600: '#475569', 500: '#64748b' },
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body { font-family: 'DM Sans', system-ui, sans-serif; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 9999px; }
+
+        /* Shared entity highlights (work in both themes) */
+        .entity-disease { background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%); color: #991b1b; }
+        .entity-drug { background: linear-gradient(135deg, #a5f3fc 0%, #67e8f9 100%); color: #0e7490; }
+        .entity-procedure { background: linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%); color: #5b21b6; }
+        .entity-labtest { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; }
+        .entity-patient { background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); color: #475569; }
+        [data-theme="modern"] .entity-disease { background: rgba(248, 113, 113, 0.35); color: #fecaca; }
+        [data-theme="modern"] .entity-drug { background: rgba(34, 211, 238, 0.35); color: #a5f3fc; }
+        [data-theme="modern"] .entity-procedure { background: rgba(167, 139, 250, 0.35); color: #c4b5fd; }
+        [data-theme="modern"] .entity-labtest { background: rgba(253, 230, 138, 0.4); color: #fef08a; }
+        [data-theme="modern"] .entity-patient { background: rgba(148, 163, 184, 0.35); color: #e2e8f0; }
+
+        .entity-highlight {
+            padding: 2px 6px; border-radius: 6px; font-weight: 600; cursor: default;
+            transition: transform 0.15s, box-shadow 0.15s; line-height: 1.75; display: inline-block;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        }
+        .entity-highlight:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+
+        /* ========== CLASSIC THEME (current/fallback) ========== */
+        body[data-theme="classic"] { background: linear-gradient(to bottom right, #f8fafc, rgba(240, 253, 250, 0.3), #f0fdfa); }
+        body[data-theme="classic"] [data-theme-only="modern"] { display: none !important; }
+        body[data-theme="classic"] [data-theme-only="classic"] { display: block; }
+        body[data-theme="modern"] [data-theme-only="classic"] { display: none !important; }
+        body[data-theme="modern"] [data-theme-only="modern"] { display: block !important; }
+        .panel {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fffe 100%);
+            border: 1px solid rgba(20, 184, 166, 0.12);
+            box-shadow: 0 4px 6px -1px rgba(15, 118, 110, 0.06), 0 2px 4px -2px rgba(15, 118, 110, 0.04);
+        }
+        .panel:hover { box-shadow: 0 20px 25px -5px rgba(15, 118, 110, 0.08), 0 8px 10px -6px rgba(15, 118, 110, 0.04); }
+        .btn-primary {
+            background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+            box-shadow: 0 4px 14px 0 rgba(20, 184, 166, 0.35);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px 0 rgba(20, 184, 166, 0.45); }
+        .btn-primary:active:not(:disabled) { transform: translateY(0); }
+        .textarea-clinical { border: 1px solid #e2e8f0; transition: border-color 0.2s, box-shadow 0.2s; }
+        .textarea-clinical:focus { outline: none; border-color: #2dd4bf; box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2); }
+        .summary-box { background: linear-gradient(180deg, #f8fffe 0%, #f0fdfa 100%); border: 1px solid rgba(20, 184, 166, 0.15); }
+        .badge { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; }
+
+        /* ========== MODERN THEME ========== */
+        [data-theme="modern"] body, body[data-theme="modern"] {
+            background: #0f172a;
+            font-family: 'Outfit', system-ui, sans-serif;
+        }
+        [data-theme="modern"] ::-webkit-scrollbar-thumb { background: #475569; }
+        [data-theme="modern"] ::-webkit-scrollbar-track { background: #1e293b; }
+        [data-theme="modern"] .theme-modern-bg { background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); border: 1px solid rgba(248, 250, 252, 0.06); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4); }
+        [data-theme="modern"] .theme-modern-bg:hover { border-color: rgba(251, 191, 36, 0.15); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        [data-theme="modern"] .theme-modern-btn {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #0f172a; font-weight: 700;
+            box-shadow: 0 4px 14px 0 rgba(245, 158, 11, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        [data-theme="modern"] .theme-modern-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px 0 rgba(245, 158, 11, 0.5);
+        }
+        body[data-theme="modern"] .theme-modern-btn { color: #0f172a !important; }
+        [data-theme="modern"] .theme-modern-input {
+            background: #0f172a; border: 1px solid #334155; color: #f8fafc;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        [data-theme="modern"] .theme-modern-input::placeholder { color: #64748b; }
+        [data-theme="modern"] .theme-modern-input:focus {
+            outline: none; border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+        }
+        [data-theme="modern"] .theme-modern-summary { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; }
+        [data-theme="modern"] .theme-modern-text { color: #f8fafc; }
+        [data-theme="modern"] .theme-modern-muted { color: #94a3b8; }
+        [data-theme="modern"] .theme-modern-accent { color: #fbbf24; }
+        [data-theme="modern"] .theme-modern-icon-bg { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+
+        /* Theme switcher */
+        .theme-switcher { display: flex; border-radius: 12px; overflow: hidden; border: 1px solid rgba(0,0,0,0.08); }
+        .theme-switcher button { padding: 0.4rem 0.75rem; font-size: 0.8rem; font-weight: 600; transition: all 0.2s; }
+        .theme-switcher button:first-child { border-right: 1px solid rgba(0,0,0,0.08); }
+        .theme-switcher button.active { background: #0d9488; color: white; }
+        .theme-switcher button:not(.active) { background: #f1f5f9; color: #64748b; }
+        .theme-switcher button:not(.active):hover { background: #e2e8f0; color: #475569; }
+        [data-theme="modern"] .theme-switcher { border-color: #334155; }
+        [data-theme="modern"] .theme-switcher button.active { background: #f59e0b; color: #0f172a; }
+        [data-theme="modern"] .theme-switcher button:not(.active) { background: #1e293b; color: #94a3b8; }
+        [data-theme="modern"] .theme-switcher button:not(.active):hover { background: #334155; color: #f8fafc; }
+        body[data-theme="modern"] #status-message.bg-blue-100 { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+        body[data-theme="modern"] #status-message.bg-green-100 { background: rgba(34, 197, 94, 0.2); color: #86efac; }
+        body[data-theme="modern"] #status-message.bg-yellow-100 { background: rgba(234, 179, 8, 0.2); color: #fde047; }
+        body[data-theme="modern"] #status-message.bg-red-100 { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+        body[data-theme="modern"] #entities-list .text-gray-700 { color: #e2e8f0; }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-6 lg:p-8" data-theme="classic">
+    <div id="app" class="max-w-6xl mx-auto">
+        <header class="text-center mb-10 sm:mb-12 relative">
+            <div class="absolute top-0 right-0 flex items-center gap-2">
+                <span class="text-xs font-medium text-ink-500 theme-modern-muted" id="theme-label">Theme</span>
+                <div class="theme-switcher">
+                    <button type="button" id="theme-classic" class="active" aria-pressed="true">Classic</button>
+                    <button type="button" id="theme-modern" aria-pressed="false">Modern</button>
+                </div>
+            </div>
+            <!-- Classic theme header -->
+            <div data-theme-only="classic">
+                <span class="badge inline-block px-3 py-1 rounded-full bg-clinical-100 text-clinical-700 text-uppercase tracking-wide mb-4">Project 07</span>
+                <h1 class="text-3xl sm:text-4xl font-bold text-ink-800 tracking-tight leading-tight">Entity-Accurate Clinical Summary</h1>
+                <p class="mt-3 text-base sm:text-lg text-ink-500 max-w-2xl mx-auto">Generate concise, fact-checked summaries from clinical text with highlighted entities and reduced hallucination.</p>
+            </div>
+            <!-- Modern theme header -->
+            <div data-theme-only="modern" class="hidden" style="display: none;">
+                <span class="text-xs font-semibold tracking-widest text-amber-400/90 uppercase mb-4 block">Project 07</span>
+                <h1 class="font-display text-3xl sm:text-4xl font-bold text-white tracking-tight">Clinical Summary</h1>
+                <p class="mt-3 text-slate-400 max-w-2xl mx-auto">Extract entities and summarize notes with minimal hallucination.</p>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            <div class="panel theme-modern-bg rounded-2xl p-6 lg:p-8 transition-all duration-300">
+                <h2 class="text-lg font-semibold text-ink-800 theme-modern-text mb-4 flex items-center gap-2">
+                    <span class="flex items-center justify-center w-9 h-9 rounded-xl bg-clinical-100 text-clinical-600 theme-modern-icon-bg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    </span>
+                    Raw Clinical Note
+                </h2>
+                <textarea id="clinical-note" rows="12" class="textarea-clinical theme-modern-input w-full p-4 rounded-xl placeholder-ink-400 text-[15px] leading-relaxed" placeholder="Paste discharge summaries, progress notes, or radiology reports here...">
+Patient Jane Doe, 65, was admitted for acute onset severe chest pain radiating to the left arm. Initial lab tests indicated elevated Troponin T levels (1.5 ng/mL). The diagnosis upon admission was Myocardial Infarction. The patient was immediately started on Aspirin and 40mg of Atorvastatin daily. An urgent Coronary Angiogram was performed, which showed a 90% occlusion in the LAD artery, requiring Percutaneous Coronary Intervention (PCI) with stent placement. The patient's condition stabilized post-procedure. Follow-up is scheduled in 2 weeks. Blood pressure remains stable at 120/80 mmHg.
+                </textarea>
+                <button onclick="analyzeText()" id="analyze-button" class="btn-primary theme-modern-btn text-white mt-5 w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2">
+                    <svg id="spinner" class="animate-spin h-5 w-5 hidden" style="color: inherit" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Generate Summary & Highlight Entities
+                </button>
+            </div>
+
+            <div class="panel theme-modern-bg rounded-2xl p-6 lg:p-8 transition-all duration-300">
+                <h2 class="text-lg font-semibold text-ink-800 theme-modern-text mb-4 flex items-center gap-2">
+                    <span class="flex items-center justify-center w-9 h-9 rounded-xl bg-clinical-100 text-clinical-600 theme-modern-icon-bg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" /></svg>
+                    </span>
+                    Entity-Accurate Summary
+                </h2>
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <span class="entity-highlight entity-disease text-xs">Disease</span>
+                    <span class="entity-highlight entity-drug text-xs">Drug</span>
+                    <span class="entity-highlight entity-procedure text-xs">Procedure</span>
+                    <span class="entity-highlight entity-labtest text-xs">Lab Test</span>
+                    <span class="entity-highlight entity-patient text-xs">Patient</span>
+                </div>
+                <div id="summary-output" class="summary-box theme-modern-summary min-h-[15rem] p-5 rounded-xl leading-relaxed overflow-y-auto text-[15px]">
+                    <p class="text-ink-500 theme-modern-muted italic">Summary will appear here after analysis...</p>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-ink-600 theme-modern-muted mb-3">Extracted Entities <span id="entity-count" class="font-mono text-clinical-600 theme-modern-accent">0</span></h3>
+                    <div id="entities-list" class="space-y-2 max-h-40 overflow-y-auto pr-1 text-sm">
+                        <p class="text-ink-500 theme-modern-muted italic">Entity list will appear here...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="status-message" class="mt-6 p-4 rounded-xl text-sm transition-all duration-300 hidden"></div>
+    </div>
+
+    <script type="module">
+        // API key is kept on the backend (server.js). Use "npm start" and open this page from the server.
+        const API_BASE = ''; // Same origin when served by our server
+
+        const THEME_KEY = 'clinical-summary-ui-theme';
+        const body = document.body;
+        const btnClassic = document.getElementById('theme-classic');
+        const btnModern = document.getElementById('theme-modern');
+
+        function setTheme(theme) {
+            body.setAttribute('data-theme', theme);
+            if (theme === 'classic') {
+                btnClassic.classList.add('active'); btnClassic.setAttribute('aria-pressed', 'true');
+                btnModern.classList.remove('active'); btnModern.setAttribute('aria-pressed', 'false');
+            } else {
+                btnModern.classList.add('active'); btnModern.setAttribute('aria-pressed', 'true');
+                btnClassic.classList.remove('active'); btnClassic.setAttribute('aria-pressed', 'false');
+            }
+            try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+        }
+
+        const saved = localStorage.getItem(THEME_KEY);
+        if (saved === 'modern') setTheme('modern');
+        else setTheme('classic');
+
+        btnClassic.addEventListener('click', () => setTheme('classic'));
+        btnModern.addEventListener('click', () => setTheme('modern'));
+
+        // --- Module Functions Setup ---
+        window.analyzeText = analyzeText;
+        
+        // --- Firebase Setup ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        setLogLevel('Debug');
+        
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let db, auth, userId = null;
+        let isAuthReady = false;
+
+        // Only initialize Firebase if configuration exists and is not empty.
+        if (Object.keys(firebaseConfig).length > 0) {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Handle Authentication
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        // If not signed in via token, sign in anonymously
+                        if (typeof __initial_auth_token === 'undefined') {
+                            signInAnonymously(auth).then(userCredential => {
+                                userId = userCredential.user.uid;
+                                console.log("Signed in anonymously. User ID:", userId);
+                            }).catch(error => {
+                                console.error("Anonymous sign-in failed:", error);
+                            });
+                        }
+                    }
+                    isAuthReady = true; // Mark auth process complete
+                });
+
+                if (typeof __initial_auth_token !== 'undefined') {
+                     signInWithCustomToken(auth, __initial_auth_token)
+                        .then(userCredential => {
+                            userId = userCredential.user.uid;
+                            console.log("Signed in with custom token. User ID:", userId);
+                        })
+                        .catch(error => {
+                            console.error("Custom token sign-in failed:", error);
+                        });
+                }
+            } catch (e) {
+                console.error("Firebase initialization failed:", e);
+                // Set ready flag even if initialization fails to proceed with core app logic
+                isAuthReady = true; 
+            }
+        } else {
+            console.warn("Firebase configuration is missing or empty. Proceeding without Firebase authentication/database features.");
+            isAuthReady = true;
+        }
+        // --- End Firebase Setup ---
+
+        const analyzeButton = document.getElementById('analyze-button');
+        const summaryOutput = document.getElementById('summary-output');
+        const entitiesList = document.getElementById('entities-list');
+        const entityCount = document.getElementById('entity-count');
+        const statusMessage = document.getElementById('status-message');
+        const spinner = document.getElementById('spinner');
+
+        // Maps entity type to Tailwind class for highlighting
+        const ENTITY_TYPE_MAP = {
+            'Disease': 'entity-disease',
+            'Drug': 'entity-drug',
+            'Procedure': 'entity-procedure',
+            'Lab Test': 'entity-labtest',
+            'Patient Detail': 'entity-patient' // NEW: Patient Details
+        };
+
+        /**
+         * Calls the backend to run the clinical analysis (NER, summarization). API key stays on server.
+         * @param {string} rawText The clinical note text.
+         */
+        async function generateSummaryAndEntities(rawText) {
+            const url = `${API_BASE}/api/analyze`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: rawText })
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(data.error || `Request failed: ${response.status}`);
+            }
+
+            return data;
+        }
+
+        /**
+         * Highlights the entities in the summary and updates the UI.
+         * @param {string} summary The raw summary text.
+         * @param {Array<Object>} entities List of {text, type} objects.
+         */
+        function renderOutput(summary, entities) {
+            let highlightedHtml = summary;
+            
+            // Sort entities by length descending to prioritize multi-word entities (e.g., 'Myocardial Infarction' before 'Infarction')
+            const sortedEntities = entities.sort((a, b) => b.text.length - a.text.length);
+
+            sortedEntities.forEach(entity => {
+                const typeClass = ENTITY_TYPE_MAP[entity.type] || 'bg-gray-300';
+                const highlightSpan = `<span title="${entity.type}: ${entity.text}" class="entity-highlight ${typeClass}">${entity.text}</span>`;
+                
+                // Use a RegExp with 'g' flag and boundary checks for replacement
+                // This prevents replacing parts of words, e.g., 'pressure' in 'blood pressure'
+                
+                const regex = new RegExp(`\\b${entity.text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'g');
+                
+                // Simple string replacement using a placeholder to ensure no double-wrapping
+                // This is a more robust way to prevent infinite recursion/nested spans
+                const tempPlaceholder = `__ENTITY_PLACEHOLDER_${Math.random().toString(36).substring(7)}__`;
+
+                // 1. Replace the plain entity text with a unique placeholder
+                highlightedHtml = highlightedHtml.replace(regex, tempPlaceholder);
+
+                // 2. Replace the placeholder with the actual HTML span
+                highlightedHtml = highlightedHtml.replace(new RegExp(tempPlaceholder, 'g'), highlightSpan);
+            });
+
+            // Update Summary Output
+            summaryOutput.innerHTML = highlightedHtml;
+
+            // Update Entities List
+            entitiesList.innerHTML = '';
+            entityCount.textContent = entities.length;
+            
+            if (entities.length === 0) {
+                 entitiesList.innerHTML = '<p class="text-gray-500 text-sm italic">No critical entities were extracted.</p>';
+                 return;
+            }
+
+            entities.forEach(entity => {
+                const typeClass = ENTITY_TYPE_MAP[entity.type] || 'bg-gray-300';
+                const item = document.createElement('div');
+                item.className = 'flex items-center space-x-2 text-sm';
+                item.innerHTML = `
+                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold text-gray-800 ${typeClass}">${entity.type}</span>
+                    <span class="text-gray-700">${entity.text}</span>
+                `;
+                entitiesList.appendChild(item);
+            });
+        }
+
+        /**
+         * Main function to handle user interaction and API call.
+         */
+        async function analyzeText() {
+            const rawText = document.getElementById('clinical-note').value.trim();
+
+            if (!rawText) {
+                updateStatus("Please enter clinical text to analyze.", 'bg-yellow-100 text-yellow-800');
+                return;
+            }
+
+
+            // Reset UI and show loading state
+            updateStatus("Analyzing text...", 'bg-blue-100 text-blue-800');
+            analyzeButton.disabled = true;
+            spinner.classList.remove('hidden');
+            summaryOutput.innerHTML = '<p class="text-center text-gray-500 py-10">Running analysis pipeline (NER, Summarization, Mitigation)...</p>';
+            entitiesList.innerHTML = '';
+            entityCount.textContent = '...';
+
+            try {
+                const result = await generateSummaryAndEntities(rawText);
+                
+                if (result && result.summary && result.entities) {
+                    renderOutput(result.summary, result.entities);
+                    updateStatus("Analysis complete! Entities are highlighted in the summary.", 'bg-green-100 text-green-800');
+                } else {
+                    // This catches cases where JSON was parsed but was structurally incomplete
+                    throw new Error("Model returned incomplete data structure (missing summary or entities).");
+                }
+
+            } catch (error) {
+                console.error("Analysis Error:", error);
+                // Display user-friendly error messages
+                let displayError = error.message.includes("403") ?
+                    "API Authorization Error (403): Check that GEMINI_API_KEY in .env is valid and the Generative Language API is enabled." :
+                    error.message.includes("400") ?
+                    "API Request Error (400): The model rejected the request (e.g., prompt too long)." :
+                    error.message.includes("Failed to fetch") || error.message.includes("NetworkError") ?
+                    "Cannot reach the server. Start the backend with: npm start — then open this page from http://localhost:3000/index2.html" :
+                    `Error during analysis: ${error.message}. Check the browser console (F12) for details.`;
+
+                updateStatus(displayError, 'bg-red-100 text-red-800');
+                summaryOutput.innerHTML = `<p class="text-red-500 py-10">Analysis failed. Check console for details.</p>`;
+                entitiesList.innerHTML = '<p class="text-red-500 text-sm italic">Error retrieving entities.</p>';
+                entityCount.textContent = '0';
+            } finally {
+                analyzeButton.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+        
+        /**
+         * Updates the status message box.
+         */
+        function updateStatus(message, className) {
+            statusMessage.classList.remove('hidden', 'bg-yellow-100', 'text-yellow-800', 'bg-blue-100', 'text-blue-800', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+            statusMessage.textContent = message;
+            statusMessage.className = `mt-6 p-4 text-sm rounded-xl transition-all duration-300 ${className}`;
+        }
+    </script>
+</body>
+</html>
