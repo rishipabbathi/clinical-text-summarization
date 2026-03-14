@@ -6,29 +6,6 @@
 
 This project delivers an Entity-Accurate Clinical Summarization system designed to generate concise, factual summaries of patient notes while preventing the generation of false medical information (hallucination). By tightly coupling Named Entity Recognition (NER) with the summarization process, we ensure all critical clinical facts (diseases, drugs, symptoms) are retained and correctly attributed to the source document.
 
----
-
-## **Quick start (web app)**
-
-The web demo uses a **backend server** so the Gemini API key is never exposed in the browser.
-
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-2. **Add your API key**
-   - Copy `.env.example` to `.env`
-   - In `.env`, set `GEMINI_API_KEY` to your key from [Google AI Studio](https://aistudio.google.com/apikey)
-   - Never commit `.env` (it is in `.gitignore`)
-
-3. **Run**
-   ```bash
-   npm start
-   ```
-   Then open **http://localhost:3000/index2.html** in your browser.
-
----
 
 ## **Motivation**
 
