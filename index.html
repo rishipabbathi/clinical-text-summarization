@@ -141,13 +141,13 @@
             </div>
             <!-- Classic theme header -->
             <div data-theme-only="classic">
-                <span class="badge inline-block px-3 py-1 rounded-full bg-clinical-100 text-clinical-700 text-uppercase tracking-wide mb-4">Project 07</span>
+                
                 <h1 class="text-3xl sm:text-4xl font-bold text-ink-800 tracking-tight leading-tight">Entity-Accurate Clinical Summary</h1>
                 <p class="mt-3 text-base sm:text-lg text-ink-500 max-w-2xl mx-auto">Generate concise, fact-checked summaries from clinical text with highlighted entities and reduced hallucination.</p>
             </div>
             <!-- Modern theme header -->
             <div data-theme-only="modern" class="hidden" style="display: none;">
-                <span class="text-xs font-semibold tracking-widest text-amber-400/90 uppercase mb-4 block">Project 07</span>
+                
                 <h1 class="font-display text-3xl sm:text-4xl font-bold text-white tracking-tight">Clinical Summary</h1>
                 <p class="mt-3 text-slate-400 max-w-2xl mx-auto">Extract entities and summarize notes with minimal hallucination.</p>
             </div>
@@ -420,7 +420,9 @@ Patient Jane Doe, 65, was admitted for acute onset severe chest pain radiating t
                     error.message.includes("400") ?
                     "API Request Error (400): The model rejected the request (e.g., prompt too long)." :
                     error.message.includes("Failed to fetch") || error.message.includes("NetworkError") ?
-                    "Cannot reach the server. Start the backend with: npm start — then open this page from http://localhost:3000/index2.html" :
+                    (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                        ? `Cannot reach the server. Run the backend (npm start) and open this page from http://localhost:${window.location.port || '3000'}/index2.html`
+                        : `Cannot reach the API on this site. If the app is deployed, the host may be restarting (wait ~1 min) or the service is down.`) :
                     `Error during analysis: ${error.message}. Check the browser console (F12) for details.`;
 
                 updateStatus(displayError, 'bg-red-100 text-red-800');
