@@ -52,6 +52,27 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function parseModelJson(rawText) {
+  let jsonString = (rawText || '').trim();
+
+  if (jsonString.startsWith('```')) {
+    const first = jsonString.indexOf('\n');
+    const last = jsonString.lastIndexOf('```');
+    if (first !== -1 && last > first) {
+      jsonString = jsonString.slice(first + 1, last).trim();
+    }
+  }
+
+  // Fallback: extract the largest JSON object-like slice.
+  const firstBrace = jsonString.indexOf('{');
+  const lastBrace = jsonString.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    jsonString = jsonString.slice(firstBrace, lastBrace + 1);
+  }
+
+  return JSON.parse(jsonString);
+}
+
 async function callGeminiWithResilience(userQuery) {
   const basePayload = {
     contents: [{ parts: [{ text: userQuery }] }],
@@ -129,24 +150,33 @@ app.post('/api/analyze', async (req, res) => {
   const userQuery = `Analyze the following clinical note: \n\n---START OF NOTE---\n${rawText}\n---END OF NOTE---\n`;
 
   try {
-    const result = await callGeminiWithResilience(userQuery);
+    // Occasionally the model returns malformed JSON; retry once before failing.
+    let parsed = null;
+    let lastParseError = null;
+    const parseAttempts = 2;
 
-    if (!result.candidates?.length || !result.candidates[0].content?.parts?.length) {
-      return res.status(502).json({ error: 'API response missing content or candidates.' });
-    }
+    for (let i = 0; i < parseAttempts; i++) {
+      const result = await callGeminiWithResilience(userQuery);
+      if (!result.candidates?.length || !result.candidates[0].content?.parts?.length) {
+        return res.status(502).json({ error: 'API response missing content or candidates.' });
+      }
 
-    let jsonString = result.candidates[0].content.parts[0].text.trim();
-    if (jsonString.startsWith('```')) {
-      const first = jsonString.indexOf('\n');
-      const last = jsonString.lastIndexOf('```');
-      if (first !== -1 && last > first) {
-        jsonString = jsonString.slice(first + 1, last).trim();
+      const rawModelText = result.candidates[0].content.parts[0].text;
+      try {
+        parsed = parseModelJson(rawModelText);
+      } catch (parseErr) {
+        lastParseError = parseErr;
+      }
+
+      if (parsed && parsed.summary && Array.isArray(parsed.entities)) {
+        break;
       }
     }
 
-    const parsed = JSON.parse(jsonString);
-    if (!parsed.summary || !Array.isArray(parsed.entities)) {
-      return res.status(502).json({ error: 'Model returned incomplete data (missing summary or entities).' });
+    if (!parsed || !parsed.summary || !Array.isArray(parsed.entities)) {
+      const error = new Error(lastParseError?.message || 'Model returned invalid or incomplete JSON.');
+      error.status = 502;
+      throw error;
     }
 
     res.json(parsed);
